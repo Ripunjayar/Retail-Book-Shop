@@ -1,0 +1,25 @@
+# LEARNING ONLY: conceptual private service map.
+# These are logical names, not currently running services.
+
+services:
+  frontend:
+    internalPort: 5173
+    publicPath: /
+  catalog-service:
+    internalPort: 8081
+    publicPath: /api/books
+  inventory-service:
+    internalPort: 8082
+    publicPath: /api/inventory
+  cart-service:
+    internalPort: 8083
+    publicPath: /api/cart
+  order-service:
+    internalPort: 8084
+    publicPath: /api/orders
+  payment-service:
+    internalPort: 8085
+    publicPath: /api/payments
+  redis:
+    internalPort: 6379
+    publicPath: none

@@ -1,0 +1,22 @@
+# LEARNING ONLY: conceptual Azure Load Balancer description.
+# This is not an executable Azure deployment file.
+# Public traffic would enter here and be forwarded to the gateway.
+
+name: bookshop-public-load-balancer
+kind: public-entry-point
+frontend:
+  protocol: HTTPS
+  port: 443
+  publicIp: bookshop-public-ip
+backendPool:
+  target: api-gateway
+  protocol: HTTP
+  port: 8080
+healthProbe:
+  path: /actuator/health
+  protocol: HTTP
+  port: 8080
+notes:
+  - Keep backend services private.
+  - Use TLS certificates managed by the platform.
+  - Use a real Azure resource template such as Bicep or Terraform for deployment.

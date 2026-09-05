@@ -1,0 +1,29 @@
+# LEARNING ONLY: generic API gateway routing example.
+# This intentionally does not use NGINX syntax and is not executable by itself.
+
+name: bookshop-api-gateway
+listen:
+  protocol: HTTP
+  port: 8080
+routes:
+  - path: /api/books
+    method: GET
+    target: catalog-service
+    targetPort: 8081
+  - path: /api/inventory
+    target: inventory-service
+    targetPort: 8082
+  - path: /api/cart
+    target: cart-service
+    targetPort: 8083
+  - path: /api/orders
+    target: order-service
+    targetPort: 8084
+  - path: /api/payments
+    target: payment-service
+    targetPort: 8085
+policies:
+  authentication: validate-access-token
+  rateLimit: 20 requests-per-second
+  maxBodySize: 2MB
+  timeout: 30 seconds
