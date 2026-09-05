@@ -1,0 +1,173 @@
+Phase,Sequence,Area,Service or Component,Activity,Dependency,Owner,Environment,Verification Status
+Architecture,1,Requirements,Platform,Confirm traffic availability security compliance regions RTO and RPO and corporate network restrictions,None,Architecture,All,Not started
+Architecture,2,Service design,All services,Define the 14 logical services: authentication user catalog search cart wishlist inventory order payment shipping notification review admin and reporting,Requirements approved,Architecture,All,Not started
+Architecture,3,Service design,All services,Choose which services are independently deployable and which can begin as modules in a shared backend,Service ownership and traffic estimates,Architecture,All,Not started
+Architecture,4,API contracts,All services,Define versioned REST and OpenAPI contracts for synchronous operations,Service boundaries,Backend team,Development,Not started
+Architecture,5,Event contracts,Kafka,Define versioned domain event schemas and compatibility rules,Service boundaries,Architecture,Development,Not started
+Architecture,6,Data ownership,Databases,Assign one owning service to each data domain and prohibit shared table writes,Service boundaries,Architecture,All,Not started
+Foundation,7,Repository structure,Frontend and backend,Create separate directories or repositories for frontend services shared contracts infrastructure and deployment configuration,Architecture approved,Platform team,Development,Not started
+Foundation,8,Service standard,All backend services,Standardize configuration logging correlation IDs health endpoints metrics tracing validation timeouts and graceful shutdown,Runtime selected,Backend team,Development,Not started
+Foundation,9,Local platform,Docker Compose,Create a local environment containing NGINX backend services Redis Kafka-compatible broker database search and observability tools,Service baseline,Platform team,Development,Not started
+Foundation,10,Container images,Docker,Define multi-stage builds non-root runtime users pinned base images immutable tags and vulnerability scanning,Runtime selected,Platform team,All,Not started
+Foundation,11,Registry,Azure Container Registry,Create repositories image naming conventions retention rules and access control,Azure subscription,Platform team,All,Not started
+Business services,12,Identity,Authentication,Implement OAuth or OIDC integration token policy roles service identity and audit events,Identity provider decision,Backend team,Development,Not started
+Business services,13,Customer,User and profile,Implement registration profiles addresses preferences and account operations,Authentication,Backend team,Development,Not started
+Business services,14,Catalog,Catalog,Implement book metadata authors categories prices descriptions images and availability references,Database design,Backend team,Development,Not started
+Business services,15,Discovery,Search,Consume catalog events and maintain a search index with filtering and sorting,Catalog events and search platform,Backend team,Development,Not started
+Business services,16,Commerce,Inventory,Implement stock levels reservation release and concurrency rules,Catalog and database,Backend team,Development,Not started
+Business services,17,Commerce,Cart,Implement add remove update quantity totals expiry recovery and user association,Authentication and Redis decision,Backend team,Development,Not started
+Business services,18,Commerce,Wishlist,Implement durable saved books and authorization,User service and database,Backend team,Development,Not started
+Business services,19,Checkout,Order,Implement pending orders order history status changes idempotency and workflow events,Inventory and authentication,Backend team,Development,Not started
+Business services,20,Checkout,Payment integration,Integrate provider tokenization payment status refunds and webhooks without storing raw card data,Order service and provider sandbox,Backend team,Development,Not started
+Business services,21,Fulfillment,Shipping,Implement shipping options address validation tracking and fulfillment events,Successful payment and shipping provider,Backend team,Development,Not started
+Business services,22,Communication,Notification,Consume order and shipping events and send email or SMS notifications,Messaging and provider,Backend team,Development,Not started
+Business services,23,Community,Reviews,Implement ratings reviews ownership moderation and abuse controls,Authentication and catalog,Backend team,Development,Not started
+Business services,24,Operations,Admin,Implement authorized management of books prices stock users and orders,Authentication and audit,Backend team,Development,Not started
+Business services,25,Analytics,Reporting,Consume business events into read models or a warehouse without overloading transactional databases,Event schemas and storage,Data team,Development,Not started
+Messaging and cache,26,Cache,Azure Cache for Redis,Define cache keys TTL eviction policy failure behavior sessions rate limits and idempotency storage,Azure service decision,Platform team,Staging,Not started
+Messaging and cache,27,Cache safety,Redis,Ensure orders payments and inventory remain recoverable from durable storage when Redis is unavailable,Durable database,Backend team,Staging,Not started
+Messaging and cache,28,Events,Kafka or Event Hubs,Choose managed Kafka or Azure Event Hubs Kafka endpoint based on required semantics and corporate standards,Architecture decision,Platform team,All,Not started
+Messaging and cache,29,Events,Kafka,Define topics partitions retention consumer groups TLS SASL ACLs retries dead-letter topics replay and lag monitoring,Messaging platform selected,Platform team,Staging,Not started
+Messaging and cache,30,Consistency,Kafka and database,Implement transactional outbox and inbox or equivalent reliable event publication and duplicate handling,Database and event design,Backend team,Development,Not started
+Edge and security,31,Ingress,Azure Load Balancer and NGINX,Place NGINX Ingress behind Azure Load Balancer and expose no individual backend service publicly,AKS networking,Platform team,Staging,Not started
+Edge and security,32,Routing,NGINX,Route frontend traffic and API paths or hostnames to internal Kubernetes Services,Service names and ports,Platform team,Staging,Not started
+Edge and security,33,Edge controls,NGINX,Configure TLS security headers request limits rate limits body limits timeouts access logs and SPA fallback,Certificates and routing,Platform team,Staging,Not started
+Edge and security,34,Network,AKS,Use private networking private endpoints network policies namespaces managed identities Key Vault and least-privilege RBAC,Azure landing zone,Security team,All,Not started
+AKS platform,35,Cluster,AKS,Create AKS with system and user node pools availability zones managed identity ACR integration and Azure Monitor,Azure subscription and network,Platform team,Development,Not started
+AKS platform,36,Workloads,Stateless services,Define Deployment Service resource requests limits probes security context PDB topology spread and configuration references for each service,Container images,Platform team,Development,Not started
+AKS platform,37,Frontend,React and NGINX,Build the Vite dist output and serve it from frontend pods through NGINX,Frontend build,Frontend team,Staging,Not started
+AKS platform,38,Stateful data,Managed Azure services,Use managed PostgreSQL or Azure SQL Blob Storage Redis and messaging where practical,Data architecture,Platform team,Staging,Not started
+Scaling,39,Pod autoscaling,HPA,Scale APIs using CPU memory request rate or latency with defined minimum maximum and stabilization settings,Resource requests and metrics,Platform team,Staging,Not started
+Scaling,40,Event autoscaling,KEDA,Scale Kafka workers from consumer lag and queue workers from queue depth,Topics and metrics,Platform team,Staging,Not started
+Scaling,41,Node autoscaling,Cluster Autoscaler,Add and remove AKS nodes when pods cannot be scheduled with bounded node pool sizes,HPA and resource sizing,Platform team,Staging,Not started
+Scaling,42,Capacity,All services,Set baseline replicas SLOs capacity limits and scale behavior per service,Load model,Architecture,Staging,Not started
+Resilience,43,Failure handling,All services,Implement timeouts exponential backoff circuit breakers bounded retries graceful degradation and compensating actions,Service contracts,Backend team,Development,Not started
+Resilience,44,Checkout safety,Order and payment,Implement idempotency keys duplicate webhook protection reservation expiry and payment failure recovery,Payment provider sandbox,Backend team,Staging,Not started
+Resilience,45,Disaster recovery,Data services,Define backups point-in-time restore replication failover RTO RPO and restore drills,Managed service selection,Data team,Staging,Not started
+Delivery,46,CI,GitHub Actions,Run npm ci lint tests frontend build backend tests contract tests and integration tests,Repository and test suites,DevOps team,Development,Not started
+Delivery,47,Quality,SonarQube and security scanning,Run SonarQube analysis dependency scanning and Docker image vulnerability scanning,Corporate endpoints and tokens,DevOps team,CI,Not started
+Delivery,48,CD,ACR and AKS,Build immutable images push to ACR and promote through development staging and production,CI success and registry,DevOps team,All,Not started
+Delivery,49,Release,Kubernetes deployment,Use Helm Kustomize or GitOps with approvals migrations gates rolling canary or blue-green releases and rollback,Deployment standard,DevOps team,Production,Not started
+Observability,50,Monitoring,Azure Monitor,Collect structured logs metrics traces NGINX metrics pod restarts node pressure and autoscaler status,AKS monitoring,Platform team,Staging,Not started
+Observability,51,Business monitoring,Checkout and messaging,Monitor checkout success payment outcomes Kafka lag Redis hit rate database connections and notification failures,Service metrics,Product and operations,Production,Not started
+Validation,52,Functional tests,All services,Verify API contracts authorization health probes idempotency and container behavior,Services implemented,QA team,Staging,Not started
+Validation,53,Integration tests,NGINX Redis Kafka,Verify routing cache expiry failure fallback event retry dead-letter replay and schema compatibility,Platform deployed,QA team,Staging,Not started
+Validation,54,Scale tests,AKS,Generate load and verify HPA KEDA and Cluster Autoscaler behavior without request interruption,Metrics and load tools,QA team,Staging,Not started
+Validation,55,Resilience tests,AKS and managed services,Test pod node zone database Redis Kafka and payment failures and verify recovery,Runbooks and staging environment,QA team,Staging,Not started
+Validation,56,Security tests,Platform and APIs,Review RBAC network policies secrets image security rate limits and payment data handling,Security controls,Security team,Staging,Not started
+Validation,57,Production readiness,Complete platform,Approve SLOs RTO RPO cost limits alerts runbooks rollback and backup restore results,All verification complete,Architecture board,Production,Not started
+Rollout,58,First vertical slice,Frontend through order,Release frontend NGINX catalog search inventory cart and order with telemetry,Core APIs and platform,Release team,Staging,Not started
+Rollout,59,Checkout slice,Identity through notification,Add authentication user payment shipping and notification with sandbox payment testing,First vertical slice,Release team,Staging,Not started
+Rollout,60,Expansion,Remaining services,Add wishlist reviews admin and reporting and split deployments only when measurable benefit exists,Core platform stable,Release team,Production,Not started
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,

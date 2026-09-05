@@ -1,0 +1,64 @@
+Phase,Step,Area,Component,Plan,Dependency,Status
+1,1,Scope,Application,Confirm the simple application scope: React frontend plus Catalog API and Order API,None,Not started
+1,2,Service design,Catalog API,Own book listings book details categories filtering and catalog administration,None,Not started
+1,3,Service design,Order API,Own cart creation orders order history order status and checkout validation,None,Not started
+1,4,API design,Frontend and APIs,Define versioned API contracts such as GET /api/catalog/books and POST /api/orders,Service boundaries,Not started
+1,5,Data ownership,Database,Keep catalog data owned by Catalog API and cart/order data owned by Order API,API design,Not started
+1,6,Security,Authentication,Choose OIDC or an approved identity provider for protected order operations,Identity provider decision,Not started
+2,7,Frontend,React application,Replace in-memory catalog data with calls to Catalog API,API contract,Not started
+2,8,Frontend,React application,Replace in-memory cart behavior with calls to Order API,API contract,Not started
+2,9,Frontend,Configuration,Use same-host paths beginning with /api to reduce CORS complexity,NGINX routing design,Not started
+2,10,Frontend,Build,Build the React application and generate the production dist output,Frontend build setup,Not started
+3,11,Backend foundation,Catalog API,Choose the approved backend language and framework and create the service project,None,Not started
+3,12,Backend foundation,Order API,Choose the approved backend language and framework and create the service project,None,Not started
+3,13,Backend standards,Both APIs,Add environment configuration structured logs request IDs validation timeouts and graceful shutdown,Runtime selected,Not started
+3,14,Health checks,Both APIs,Add startup readiness and liveness endpoints,Service foundation,Not started
+3,15,Testing,Both APIs,Add unit integration API contract authorization and validation tests,API implementation,Not started
+4,16,Database,Catalog API,Create catalog schema migrations indexes and database access layer,Data ownership,Not started
+4,17,Database,Order API,Create cart and order schemas migrations indexes and transaction handling,Data ownership,Not started
+4,18,Order safety,Order API,Add server-side price validation inventory checks and idempotency keys,Order database,Not started
+4,19,Database operations,Managed database,Configure backups encryption point-in-time restore connection limits and private access,Azure subscription,Not started
+5,20,Containers,Frontend,Create a production frontend container that serves the Vite dist files,Frontend build,Not started
+5,21,Containers,Catalog API,Create a production container for Catalog API with a non-root runtime user,Catalog API project,Not started
+5,22,Containers,Order API,Create a production container for Order API with a non-root runtime user,Order API project,Not started
+5,23,Container security,All images,Use multi-stage builds pinned base images immutable commit tags vulnerability scans and SBOMs,Container standards,Not started
+5,24,Registry,Azure Container Registry,Create image repositories access policies retention and image promotion rules,Azure subscription,Not started
+6,25,Azure platform,AKS,Create an AKS cluster with managed identity monitoring and approved network policy,Azure landing zone,Not started
+6,26,Azure platform,AKS nodes,Create system and user node pools and define availability and capacity targets,AKS design,Not started
+6,27,Azure platform,Namespaces,Create separate development staging and production namespaces,AKS cluster,Not started
+6,28,Secrets,Key Vault,Store database OIDC registry and application secrets in Key Vault or approved secret integration,Azure identity,Not started
+7,29,Load balancing,Azure Load Balancer,Provision one public Azure Load Balancer as the only public entry point,AKS cluster,Not started
+7,30,API gateway,NGINX Ingress,Install NGINX Ingress Controller behind the Azure Load Balancer,AKS cluster,Not started
+7,31,Internal networking,Kubernetes Services,Expose frontend Catalog API and Order API as internal ClusterIP Services,Deployments,Not started
+7,32,DNS,DNS provider,Point shop.example.com to the Azure public IP or approved DNS name,Public endpoint,Not started
+7,33,TLS,NGINX,Configure HTTPS certificates HTTP-to-HTTPS redirect and certificate renewal,Domain and certificate,Not started
+7,34,Routing,NGINX,Route / to frontend /api/catalog to Catalog API and /api/orders to Order API,Internal Services,Not started
+7,35,Gateway controls,NGINX,Configure request limits body-size limits timeouts security headers rate limits and logs,Routing,Not started
+7,36,SPA routing,NGINX,Configure React history fallback for frontend routes while preserving /api routes,Frontend build,Not started
+8,37,Kubernetes workload,Frontend Deployment,Deploy frontend image with replicas probes resources and topology settings,ACR image,Not started
+8,38,Kubernetes workload,Catalog Deployment,Deploy Catalog API with at least two replicas probes resources and topology settings,ACR image and database,Not started
+8,39,Kubernetes workload,Order Deployment,Deploy Order API with at least two replicas probes resources and topology settings,ACR image and database,Not started
+8,40,Availability,All workloads,Add PodDisruptionBudgets and graceful shutdown for replicated services,Multiple replicas,Not started
+8,41,Security,AKS,Apply NetworkPolicies so only approved traffic reaches APIs and database,Network design,Not started
+9,42,Autoscaling,Catalog API,Configure HPA using CPU or memory first and request metrics later if available,Catalog resource requests,Not started
+9,43,Autoscaling,Order API,Configure HPA using CPU or memory while respecting database capacity,Order resource requests,Not started
+9,44,Autoscaling,Frontend,Configure frontend HPA if traffic requires more than the baseline replicas,Traffic measurements,Not started
+9,45,Node scaling,AKS Cluster Autoscaler,Configure node-pool minimum and maximum sizes and scale nodes when pods cannot be scheduled,Resource requests,Not started
+9,46,Scaling validation,AKS,Load test catalog reads and order creation and verify pods and nodes scale correctly,HPA and autoscaler,Not started
+10,47,Observability,AKS and NGINX,Collect logs metrics traces request latency errors pod restarts node health and routing errors,Monitoring platform,Not started
+10,48,Application monitoring,Catalog and Order APIs,Monitor API success rate latency database connections and order completion,Service metrics,Not started
+10,49,Alerts,Operations,Create alerts for failed probes high errors high latency pending pods and database issues,Monitoring data,Not started
+10,50,Recovery,Managed database,Perform backup restore and failover tests in staging,Database configuration,Not started
+11,51,CI,GitHub Actions,Install locked dependencies run lint tests and build the frontend and both APIs,Repository and tests,Not started
+11,52,Security scanning,CI pipeline,Scan dependencies containers and infrastructure configuration,Container images,Not started
+11,53,Quality,SonarQube,Run SonarQube analysis and enforce the corporate quality gate,SonarQube access,Not started
+11,54,Publish,Azure Container Registry,Push tested images using immutable commit SHA tags,CI success,Not started
+11,55,CD,AKS,Deploy to development then staging and promote production with approval,ACR images,Not started
+11,56,Release safety,AKS,Use rolling updates and verify readiness before routing production traffic,Health probes,Not started
+11,57,Rollback,AKS,Test restoring the previous image and define database migration rollback rules,Release process,Not started
+12,58,Functional verification,Complete application,Verify browser catalog browsing cart and order flow through NGINX,All services deployed,Not started
+12,59,Network verification,Load balancer and gateway,Verify only Azure Load Balancer and NGINX are public and backend services are private,Network policies,Not started
+12,60,Failure verification,AKS,Delete API pods and verify Kubernetes replaces them and NGINX routes only to ready replicas,Probes and replicas,Not started
+12,61,Scale verification,AKS,Hammer the APIs and verify HPA and Cluster Autoscaler behavior without lost requests,Load test,Not started
+12,62,Security verification,Complete platform,Verify TLS authentication authorization secret handling RBAC network rules and image scans,Security controls,Not started
+12,63,Production readiness,Complete platform,Approve SLOs backups alerts runbooks cost limits rollback and support ownership,All verification complete,Not started

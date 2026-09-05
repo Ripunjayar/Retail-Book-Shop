@@ -1,0 +1,551 @@
+{\rtf1\ansi\deff0
+{\fonttbl{\f0 Calibri;}{\f1 Consolas;}}
+{\colortbl;\red31\green78\blue121;\red90\green90\blue90;}
+\paperw12240\paperh15840\margl900\margr900\margt800\margb800
+\fs32\b\cf1 Retail Book Shop\par
+\fs28 AKS Technical Implementation Plan\par
+\fs20\cf0 Version 1.0 | Scope: backend services, containers, NGINX, Azure load balancing, Redis, Kafka messaging, AKS scalability, CI/CD\par
+\par
+\b Purpose\b0\par
+This document is a step-by-step technical plan for evolving the current React/Vite storefront into a production-ready, scalable platform on Azure Kubernetes Service (AKS). It includes representative configuration code. The code is reference material only and does not modify the current project.\par
+\par
+\b Current baseline\b0\par
+The current repository contains a React/Vite frontend. Catalog data and cart state are currently held in the browser. There are no backend services, Dockerfiles, Kubernetes manifests, Redis, Kafka, or CI/CD deployment files yet. The implementation must therefore proceed from a new backend foundation.\par
+\par
+\b Target architecture\b0\par
+\f1 Internet -> Azure Load Balancer -> NGINX Ingress -> Frontend Service -> Frontend Pods\par
+                         NGINX Ingress -> Backend Services -> Backend Pods\par
+                                                     -> Managed database\par
+                                                     -> Azure Cache for Redis\par
+                                                     -> Kafka-compatible messaging\par
+                                                     -> Blob Storage, search, payment and email providers\f0\par
+\par
+\b Recommended deployment principle\b0\par
+Treat the fourteen items below as logical service boundaries. Do not automatically create fourteen independently operated services on the first release. Start with a modular backend plus workers, then split a module when independent scaling, ownership, or failure isolation provides a measurable benefit.\par
+\page
+\fs26\b 1. Delivery phases\b0\fs20\par
+\b Phase 0 - decisions and prerequisites\b0\par
+1. Confirm traffic, users, regions, compliance, RTO, RPO, availability targets, budget, and corporate network restrictions.\par
+2. Select the approved Azure subscription, resource groups, region pair, naming standard, tagging, and identity model.\par
+3. Decide whether the message platform must be Apache Kafka or whether Azure Event Hubs Kafka compatibility is acceptable.\par
+4. Decide whether NGINX is mandatory or whether Azure Application Gateway for Containers is the enterprise standard.\par
+5. Create a threat model and classify customer, payment, operational, and public data.\par
+\par
+\b Phase 1 - engineering foundation\b0\par
+6. Select the backend language and framework supported by the company. Standardize one runtime before building services.\par
+7. Create service templates with configuration, logging, request IDs, metrics, tracing, validation, timeouts, graceful shutdown, and health endpoints.\par
+8. Define REST/OpenAPI contracts and event schemas before implementation. Version both contracts.\par
+9. Create local Compose dependencies for a database, Redis, Kafka-compatible broker, NGINX, search, and observability.\par
+10. Create image standards: multi-stage build, non-root user, pinned base image, vulnerability scan, immutable tag, and SBOM.\par
+\par
+\b Phase 2 - first vertical slice\b0\par
+11. Implement catalog, inventory, cart, order, authentication, and frontend integration.\par
+12. Add NGINX routing and AKS deployment.\par
+13. Add Redis for cache and short-lived state; keep durable records in the database.\par
+14. Add Kafka events, outbox processing, retries, and dead-letter handling.\par
+15. Load test the checkout path before adding all remaining services.\par
+\par
+\b Phase 3 - remaining capabilities\b0\par
+16. Add wishlist, payment, shipping, notifications, reviews, admin, reporting, and search improvements.\par
+17. Split service deployables only after measuring load, release coupling, or team ownership.\par
+18. Add production resilience, security, backup restore, observability, and release controls.\par
+\page
+\fs26\b 2. Service-by-service implementation\b0\fs20\par
+\b 2.1 Authentication service\b0\par
+Responsibilities: sign-in, sign-up if required, OAuth/OIDC integration, token validation, roles, refresh policy, account lockout, and audit events.\par
+Steps:\par
+1. Integrate with the corporate identity provider or an approved OIDC provider.\par
+2. Keep provider client secrets in Key Vault; never use a secret in a VITE_* browser variable.\par
+3. Validate issuer, audience, signature, expiry, nonce, and scopes.\par
+4. Issue only short-lived application tokens where necessary.\par
+5. Publish UserRegistered, UserRoleChanged, and UserDisabled events.\par
+6. Add tests for invalid tokens, replay, missing roles, and disabled accounts.\par
+Interface examples: POST /auth/login, POST /auth/refresh, POST /auth/logout, GET /auth/me.\par
+Container profile: stateless API; minimum two replicas in production.\par
+\par
+\b 2.2 User and profile service\b0\par
+Responsibilities: customer profile, addresses, preferences, consent, and account status.\par
+Steps:\par
+1. Create the user schema owned only by this service.\par
+2. Store address history and consent changes with audit timestamps.\par
+3. Require an authenticated subject ID for all customer operations.\par
+4. Publish ProfileUpdated and AddressChanged events.\par
+5. Protect personal data with encryption, access control, retention, and deletion procedures.\par
+Interface examples: GET /users/me, PATCH /users/me, GET /users/me/addresses.\par
+Container profile: stateless API; database is external and durable.\par
+\par
+\b 2.3 Catalog service\b0\par
+Responsibilities: books, authors, categories, descriptions, prices, cover-image references, and publication status.\par
+Steps:\par
+1. Define a catalog database owned by the catalog service.\par
+2. Add admin-only write APIs and public read APIs.\par
+3. Validate price currency, ISBN, category, and image metadata.\par
+4. Publish BookCreated, BookUpdated, PriceChanged, and BookRemoved events.\par
+5. Use Blob Storage for images; store only object references in the database.\par
+Interface examples: GET /books, GET /books/{id}, POST /admin/books, PATCH /admin/books/{id}.\par
+Container profile: stateless API; horizontally scalable reads.\par
+\par
+\b 2.4 Search service\b0\par
+Responsibilities: free-text search, filtering, sorting, and search indexing.\par
+Steps:\par
+1. Select Azure AI Search or the approved search engine.\par
+2. Consume catalog events using a dedicated consumer group.\par
+3. Build an index model separate from the catalog write model.\par
+4. Make indexing idempotent and replayable.\par
+5. Return a clear stale-index behavior if the search platform is unavailable.\par
+6. Monitor indexing lag and failed documents.\par
+Interface examples: GET /search?q=history&category=science.\par
+Container profile: stateless query API plus event-driven index worker.\par
+\par
+\b 2.5 Inventory service\b0\par
+Responsibilities: stock, reservations, release, adjustment, and availability.\par
+Steps:\par
+1. Make inventory the only writer of stock quantities.\par
+2. Implement atomic reservation with an expiration time.\par
+3. Require an idempotency key for reserve and release commands.\par
+4. Publish StockReserved, StockReleased, and StockAdjusted events.\par
+5. Reject overselling under concurrent checkout load.\par
+6. Add reconciliation against warehouse data if applicable.\par
+Interface examples: GET /inventory/{bookId}, POST /inventory/reservations, DELETE /inventory/reservations/{id}.\par
+Container profile: stateless API; transactional database required.\par
+\par
+\b 2.6 Cart service\b0\par
+Responsibilities: cart lines, quantities, pricing snapshot, expiry, and checkout preparation.\par
+Steps:\par
+1. Use the authenticated user ID or an anonymous cart ID.\par
+2. Store hot cart state in Redis with a defined TTL.\par
+3. Persist carts or checkout snapshots durably when business policy requires recovery.\par
+4. Reprice and revalidate stock during checkout; never trust browser totals.\par
+5. Add idempotent merge behavior when an anonymous user signs in.\par
+Interface examples: GET /cart, POST /cart/items, PATCH /cart/items/{bookId}, DELETE /cart/items/{bookId}.\par
+Container profile: stateless API; Redis is an optimization, not the order system of record.\par
+\par
+\b 2.7 Wishlist service\b0\par
+Responsibilities: durable saved books and list management.\par
+Steps:\par
+1. Store wishlist ownership in a durable database.\par
+2. Validate that referenced books exist or mark removed products clearly.\par
+3. Add authorization tests for cross-user access.\par
+4. Publish WishlistItemAdded and WishlistItemRemoved events if reporting needs them.\par
+Container profile: stateless API with durable database.\par
+\page
+\fs26\b 2.8 Order service\b0\fs20\par
+Responsibilities: checkout orchestration, order state, totals, history, and status transitions.\par
+Steps:\par
+1. Define an explicit state machine: Pending, Reserved, PaymentPending, Paid, FulfillmentPending, Shipped, Completed, Cancelled, and Failed.\par
+2. Store an immutable price snapshot and delivery snapshot on the order.\par
+3. Require an idempotency key for order creation.\par
+4. Coordinate inventory reservation and payment through commands and events.\par
+5. Publish OrderCreated, OrderPaid, OrderCancelled, and OrderShipped events.\par
+6. Implement compensation when payment or inventory fails.\par
+Interface examples: POST /orders, GET /orders/{id}, GET /users/me/orders.\par
+Container profile: stateless API; durable transactional database required.\par
+\par
+\b 2.9 Payment integration service\b0\par
+Responsibilities: payment-provider adapter, payment intent, status, refunds, and webhook verification.\par
+Steps:\par
+1. Select an approved payment provider and sandbox.\par
+2. Use provider-hosted fields or tokenization; do not store raw card numbers or security codes.\par
+3. Store only provider IDs, status, amount, currency, and audit metadata.\par
+4. Verify webhook signatures and reject duplicate events.\par
+5. Make payment commands and callbacks idempotent.\par
+6. Publish PaymentAuthorized, PaymentFailed, and RefundCompleted events.\par
+7. Use a private outbound route and monitor provider errors and latency.\par
+Container profile: stateless API and webhook worker; secrets in Key Vault.\par
+\par
+\b 2.10 Shipping service\b0\par
+Responsibilities: shipping options, address validation, labels, tracking, and carrier integration.\par
+Steps:\par
+1. Validate delivery address before payment capture if business policy requires it.\par
+2. Integrate with a carrier sandbox first.\par
+3. Consume OrderPaid and publish ShipmentCreated, ShipmentDispatched, and DeliveryUpdated.\par
+4. Store carrier IDs and tracking status, not carrier credentials in code.\par
+5. Make carrier callbacks idempotent.\par
+Container profile: stateless API and worker; durable shipment data.\par
+\par
+\b 2.11 Notification service\b0\par
+Responsibilities: email/SMS/push templates and delivery.\par
+Steps:\par
+1. Consume order, payment, and shipping events.\par
+2. Use a provider adapter and store delivery status.\par
+3. Apply retry limits and dead-letter failed messages.\par
+4. Avoid sending duplicate confirmations by using an event ID as an idempotency key.\par
+5. Keep templates versioned and reviewed.\par
+Container profile: event-driven workers; scale from Kafka lag.\par
+\par
+\b 2.12 Review service\b0\par
+Responsibilities: ratings, reviews, verification, moderation, and abuse controls.\par
+Steps:\par
+1. Permit reviews only for eligible customers if required.\par
+2. Store moderation state and audit actions.\par
+3. Add rate limiting, profanity/abuse screening, and report handling.\par
+4. Publish ReviewPublished and ReviewModerated events.\par
+Container profile: stateless API; durable database.\par
+\par
+\b 2.13 Admin service\b0\par
+Responsibilities: protected operations for catalog, prices, stock, users, and orders.\par
+Steps:\par
+1. Use separate admin roles and step-up authentication for sensitive operations.\par
+2. Call domain APIs instead of writing other services' tables.\par
+3. Log every administrative action with actor, reason, and before/after references.\par
+4. Add approval workflow for price and inventory changes where required.\par
+Container profile: stateless API; private route or strict authorization.\par
+\par
+\b 2.14 Reporting service\b0\par
+Responsibilities: sales, popular books, revenue, inventory, and operational reports.\par
+Steps:\par
+1. Consume business events into reporting read models.\par
+2. Keep reporting queries away from transactional databases.\par
+3. Define event correction and replay procedures.\par
+4. Mask or aggregate personal data in reports.\par
+5. Add scheduled exports only through controlled jobs.\par
+Container profile: API plus event consumer; scale independently from checkout.\par
+\page
+\fs26\b 3. Container and image implementation\b0\fs20\par
+1. Give each deployable a Dockerfile and a health endpoint.\par
+2. Build dependencies in a builder stage and run only production artifacts in the final stage.\par
+3. Run as a non-root user with a read-only filesystem where possible.\par
+4. Set CPU and memory requests and limits after load testing.\par
+5. Tag images with a commit SHA, never only latest.\par
+6. Scan images and dependencies before pushing to Azure Container Registry.\par
+\par
+\b Representative backend Dockerfile\b0\par
+\f1 FROM node:20-alpine AS build\par
+WORKDIR /app\par
+COPY package*.json ./\par
+RUN npm ci\par
+COPY . .\par
+RUN npm run build\par
+\par
+FROM node:20-alpine\par
+WORKDIR /app\par
+ENV NODE_ENV=production\par
+COPY --from=build /app/dist ./dist\par
+USER node\par
+EXPOSE 3000\par
+CMD ["node", "dist/server.js"]\f0\par
+\par
+\b Representative frontend production Dockerfile\b0\par
+\f1 FROM node:20-alpine AS build\par
+WORKDIR /app\par
+COPY package*.json ./\par
+RUN npm ci\par
+COPY . .\par
+RUN npm run build\par
+\par
+FROM nginx:alpine\par
+COPY --from=build /app/dist /usr/share/nginx/html\par
+EXPOSE 80\par
+CMD ["nginx", "-g", "daemon off;"]\f0\par
+\page
+\fs26\b 4. NGINX, load balancer, and reverse proxy\b0\fs20\par
+Traffic flow:\par
+1. Azure Load Balancer receives the public IP and forwards TCP/HTTP traffic to the NGINX Ingress service.\par
+2. NGINX terminates TLS when that is the selected policy.\par
+3. NGINX applies host/path rules, limits, headers, timeouts, and access logging.\par
+4. NGINX forwards requests to internal Kubernetes Services.\par
+5. Kubernetes Services distribute traffic to ready pods.\par
+6. Backend pods call only internal services or approved private endpoints.\par
+\par
+Routing policy:\par
+- shop.example.com/ -> frontend service\par
+- shop.example.com/api/auth -> authentication service\par
+- shop.example.com/api/books -> catalog service\par
+- shop.example.com/api/search -> search service\par
+- shop.example.com/api/cart -> cart service\par
+- shop.example.com/api/orders -> order service\par
+- shop.example.com/api/payments/webhook -> payment service\par
+- admin.example.com/ -> admin service with stricter access policy\par
+\par
+\b Representative NGINX Kubernetes routing\b0\par
+\f1 apiVersion: networking.k8s.io/v1\par
+kind: Ingress\par
+metadata:\par
+  name: bookshop-edge\par
+  annotations:\par
+    nginx.ingress.kubernetes.io/proxy-body-size: 2m\par
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "30"\par
+    nginx.ingress.kubernetes.io/limit-rps: "20"\par
+spec:\par
+  ingressClassName: nginx\par
+  tls:\par
+  - hosts: [shop.example.com]\par
+    secretName: shop-tls\par
+  rules:\par
+  - host: shop.example.com\par
+    http:\par
+      paths:\par
+      - path: /api/books\par
+        pathType: Prefix\par
+        backend:\par
+          service:\par
+            name: catalog\par
+            port:\par
+              number: 80\par
+      - path: /api/cart\par
+        pathType: Prefix\par
+        backend:\par
+          service:\par
+            name: cart\par
+            port:\par
+              number: 80\par
+      - path: /\par
+        pathType: Prefix\par
+        backend:\par
+          service:\par
+            name: frontend\par
+            port:\par
+              number: 80\f0\par
+\par
+Security decisions:\par
+- Put NGINX behind Azure Load Balancer; do not expose every service with a public LoadBalancer service.\par
+- Use a WAF at the approved edge if required. Do not duplicate conflicting TLS and WAF policies.\par
+- Configure CORS only for genuinely cross-origin clients. Same-host /api routing usually avoids unnecessary CORS.\par
+- Set security headers, request limits, upstream timeouts, and access-log redaction.\par
+\page
+\fs26\b 5. Redis implementation\b0\fs20\par
+Use Azure Cache for Redis in production unless there is a strong reason to operate Redis in AKS.\par
+\par
+Use cases:\par
+- Cart cache or short-lived anonymous cart\par
+- Session or token revocation data when required\par
+- Rate limiting counters\par
+- Idempotency keys with a defined retention period\par
+- Catalog and search cache\par
+\par
+Rules:\par
+1. Define key prefixes by service, for example cart:user:{id} and idem:payment:{key}.\par
+2. Set TTLs for every non-permanent key.\par
+3. Never make Redis the source of truth for orders, payments, or stock.\par
+4. Define behavior on cache miss and Redis outage.\par
+5. Configure TLS, authentication, private endpoint, firewall, and least-privilege access.\par
+6. Monitor memory, evictions, hit rate, connections, latency, and failover.\par
+7. Test reconnect and fallback behavior.\par
+\par
+Representative configuration concept:\par
+\f1 REDIS_URL=rediss://bookshop-cache.internal:6380\par
+REDIS_DEFAULT_TTL_SECONDS=900\par
+CART_KEY_PREFIX=cart:\par
+IDEMPOTENCY_KEY_PREFIX=idem:\f0\par
+\par
+Redis is shared infrastructure, but ownership of each key namespace remains with the service that creates it.\par
+\page
+\fs26\b 6. Kafka messaging implementation\b0\fs20\par
+Use Azure Event Hubs Kafka compatibility, managed Kafka, or an approved Kafka operator. Choose based on required Kafka semantics, support, and corporate standards. Do not run a single broker in production.\par
+\par
+Topic examples:\par
+- catalog.book.v1\par
+- inventory.stock.v1\par
+- cart.updated.v1\par
+- orders.order-created.v1\par
+- payments.payment-status.v1\par
+- shipping.shipment-status.v1\par
+- notifications.delivery.v1\par
+- reporting.business-events.v1\par
+\par
+Implementation steps:\par
+1. Define event ownership, schema, key, partition strategy, retention, and compatibility policy.\par
+2. Use the aggregate ID as the message key when per-aggregate ordering matters.\par
+3. Give every worker a stable consumer group.\par
+4. Add schema validation and backward-compatible evolution.\par
+5. Use an outbox table so a committed database change and its event cannot diverge.\par
+6. Use retries with a limit, then route to a dead-letter topic.\par
+7. Record event ID, correlation ID, producer, schema version, and timestamp.\par
+8. Make consumers idempotent because delivery can be repeated.\par
+9. Monitor consumer lag, throughput, errors, retries, dead letters, and partition skew.\par
+10. Document replay, reprocessing, and poison-message procedures.\par
+\par
+Representative consumer environment:\par
+\f1 KAFKA_BROKERS=bookshop-events.servicebus.windows.net:9093\par
+KAFKA_SECURITY_PROTOCOL=SASL_SSL\par
+KAFKA_CONSUMER_GROUP=notification-service\par
+KAFKA_TOPIC=orders.order-created.v1\f0\par
+\par
+Do not put passwords or connection strings in source control. Use workload identity or Key Vault references.\par
+\page
+\fs26\b 7. AKS cluster implementation\b0\fs20\par
+1. Create a private or appropriately restricted AKS cluster in the approved region.\par
+2. Use separate system and user node pools. Use availability zones.\par
+3. Enable managed identity, ACR integration, Azure Monitor, network policy, and cluster autoscaler.\par
+4. Create namespaces such as bookshop-dev, bookshop-test, and bookshop-prod.\par
+5. Install NGINX Ingress, metrics collection, policy controls, and the secrets integration approved by the platform team.\par
+6. Create internal ClusterIP Services for all backend APIs.\par
+7. Create Deployments with probes, resource settings, disruption budgets, and topology spread.\par
+8. Use managed database, Redis, messaging, search, storage, and Key Vault services through private connectivity.\par
+\par
+\b Representative Deployment and Service\b0\par
+\f1 apiVersion: apps/v1\par
+kind: Deployment\par
+metadata:\par
+  name: catalog\par
+spec:\par
+  replicas: 3\par
+  selector:\par
+    matchLabels:\par
+      app: catalog\par
+  template:\par
+    metadata:\par
+      labels:\par
+        app: catalog\par
+    spec:\par
+      containers:\par
+      - name: catalog\par
+        image: registry.example.com/bookshop/catalog:COMMIT_SHA\par
+        ports:\par
+        - containerPort: 3000\par
+        resources:\par
+          requests: { cpu: 100m, memory: 128Mi }\par
+          limits: { cpu: 500m, memory: 512Mi }\par
+        readinessProbe:\par
+          httpGet: { path: /ready, port: 3000 }\par
+        livenessProbe:\par
+          httpGet: { path: /live, port: 3000 }\par
+        startupProbe:\par
+          httpGet: { path: /startup, port: 3000 }\par
+---\par
+apiVersion: v1\par
+kind: Service\par
+metadata:\par
+  name: catalog\par
+spec:\par
+  type: ClusterIP\par
+  selector:\par
+    app: catalog\par
+  ports:\par
+  - port: 80\par
+    targetPort: 3000\f0\par
+\par
+A readiness failure removes a pod from traffic. A liveness failure restarts it. A startup probe protects slow-starting services from premature restarts.\par
+\page
+\fs26\b 8. Autoscaling implementation\b0\fs20\par
+\b Horizontal Pod Autoscaler\b0\par
+Use HPA for stateless APIs. Start with CPU/memory, then add request rate or latency metrics through the approved metrics adapter.\par
+\f1 apiVersion: autoscaling/v2\par
+kind: HorizontalPodAutoscaler\par
+metadata:\par
+  name: catalog\par
+spec:\par
+  scaleTargetRef:\par
+    apiVersion: apps/v1\par
+    kind: Deployment\par
+    name: catalog\par
+  minReplicas: 3\par
+  maxReplicas: 20\par
+  behavior:\par
+    scaleUp: { stabilizationWindowSeconds: 0 }\par
+    scaleDown: { stabilizationWindowSeconds: 300 }\par
+  metrics:\par
+  - type: Resource\par
+    resource:\par
+      name: cpu\par
+      target: { type: Utilization, averageUtilization: 65 }\f0\par
+\par
+\b KEDA\b0\par
+Use KEDA for notification, reporting, search-index, and other workers that scale from Kafka lag or queue depth. Define minimum replicas, maximum replicas, polling interval, cooldown, and failure behavior.\par
+\par
+\b Cluster Autoscaler\b0\par
+Use cluster autoscaler to add nodes when pods cannot be scheduled. Define node-pool minimum and maximum size. Ensure pod requests are realistic, otherwise node scaling signals will be wrong.\par
+\par
+Scaling test sequence:\par
+1. Generate baseline traffic.\par
+2. Increase API requests and verify HPA adds pods.\par
+3. Increase Kafka backlog and verify KEDA adds consumers.\par
+4. Fill node capacity and verify cluster autoscaler adds nodes.\par
+5. Reduce load and confirm stabilization avoids flapping.\par
+6. Verify scale-down does not interrupt active requests.\par
+\page
+\fs26\b 9. Data, security, and reliability\b0\fs20\par
+\b Durable data\b0\par
+Prefer Azure Database for PostgreSQL or Azure SQL. Define schema ownership, migration process, connection pooling, backups, encryption, point-in-time restore, replicas, failover, retention, and restore drills.\par
+\par
+\b Secrets and identity\b0\par
+Use Azure Key Vault and workload identity. Use Kubernetes Secrets only as references or synchronized values under the approved policy. Rotate database, Redis, Kafka, payment, and certificate credentials.\par
+\par
+\b Network security\b0\par
+Use private endpoints for managed services, network policies between namespaces, restricted egress, internal service discovery, and RBAC with least privilege.\par
+\par
+\b Resilience patterns\b0\par
+- Idempotency keys for checkout, payment, reservation, and webhooks.\par
+- Timeouts and bounded exponential retry.\par
+- Circuit breakers for external providers.\par
+- Outbox/inbox processing for event consistency.\par
+- Dead-letter topics and operator replay.\par
+- Graceful degradation when search, cache, or notification is unavailable.\par
+- PodDisruptionBudgets and zone spreading.\par
+- No permanent data on container local disk.\par
+\par
+Failure tests:\par
+Pod crash, node loss, zone loss, Redis outage, Kafka consumer outage, database failover, payment timeout, duplicate webhook, provider outage, and partial deployment.\par
+\page
+\fs26\b 10. CI/CD and operations\b0\fs20\par
+Pipeline sequence:\par
+1. Checkout source.\par
+2. Install exact dependencies from lockfiles.\par
+3. Run lint, unit, contract, integration, and security tests.\par
+4. Run frontend build and backend builds.\par
+5. Run SonarQube analysis and quality gate.\par
+6. Build images and generate SBOM.\par
+7. Scan images and dependencies.\par
+8. Push immutable images to Azure Container Registry.\par
+9. Deploy to development and run smoke tests.\par
+10. Promote to test/staging with approval.\par
+11. Run load and resilience tests.\par
+12. Deploy production with rolling, canary, or blue-green strategy.\par
+13. Roll back on readiness, error-rate, latency, or business-SLO failure.\par
+\par
+\b Representative GitHub Actions pipeline\b0\par
+\f1 name: bookshop-ci\par
+on: [push, pull_request]\par
+jobs:\par
+  verify:\par
+    runs-on: ubuntu-latest\par
+    steps:\par
+    - uses: actions/checkout@v4\par
+    - uses: actions/setup-node@v4\par
+      with:\par
+        node-version: 20\par
+        cache: npm\par
+    - run: npm ci\par
+    - run: npm run lint\par
+    - run: npm test --if-present\par
+    - run: npm run build\par
+    - run: docker build -t bookshop:${{ github.sha }} .\f0\par
+\par
+Corporate repositories may require approved action versions, internal npm registries, private runners, and an internal SonarQube URL.\par
+\par
+\b Observability\b0\par
+Collect structured logs, traces, metrics, NGINX access/error metrics, API latency/error rate, pod restarts, node pressure, HPA/KEDA state, Redis hit rate and evictions, Kafka lag, database connections, payment outcomes, and checkout success.\par
+\par
+Operational runbooks must cover deployment rollback, dead-letter replay, Redis failover, Kafka lag, database restore, certificate renewal, secret rotation, and provider outage.\par
+\page
+\fs26\b 11. Recommended implementation order\b0\fs20\par
+1. Baseline the existing frontend build and lint.\par
+2. Define service contracts, event schemas, data ownership, and identity decisions.\par
+3. Create backend service template and local dependencies.\par
+4. Implement authentication and user profile.\par
+5. Implement catalog, inventory, cart, and order.\par
+6. Integrate the frontend with the APIs; remove reliance on in-memory catalog/cart data.\par
+7. Add managed database, Redis, and outbox processing.\par
+8. Add payment sandbox, shipping sandbox, notification worker, and Kafka event flows.\par
+9. Create AKS, ACR, Key Vault, monitoring, private networking, and NGINX ingress.\par
+10. Deploy the first vertical slice with at least two replicas per API.\par
+11. Add HPA, KEDA, cluster autoscaler, resource tuning, and load tests.\par
+12. Add search, wishlist, reviews, admin, and reporting.\par
+13. Add SonarQube, image scans, CI/CD promotion, canary or blue-green release, and rollback.\par
+14. Complete security, restore, resilience, cost, and production-readiness reviews.\par
+\par
+\b Production readiness checklist\b0\par
+[ ] All services have an owner, API contract, event contract, health endpoints, tests, image, and runbook.\par
+[ ] No secret is present in source, image, frontend bundle, or logs.\par
+[ ] Only NGINX/approved edge is public; internal services use ClusterIP.\par
+[ ] Durable business data is outside pod local storage.\par
+[ ] Redis outage, Kafka replay, database restore, payment retry, and rollback are tested.\par
+[ ] HPA, KEDA, and node autoscaling are tested under realistic traffic.\par
+[ ] Monitoring and alerts cover technical and business SLOs.\par
+[ ] CI quality gates and image scans run before deployment.\par
+[ ] Production promotion requires approval and has a rollback path.\par
+[ ] Cost, RTO, RPO, security, and compliance targets are signed off.\par
+\par
+\b Final note\b0\par
+Docker packages each service. NGINX reverse-proxies and routes requests. Azure Load Balancer exposes the edge. Kubernetes schedules and replaces pods. HPA/KEDA scale pods. Cluster Autoscaler scales nodes. Redis provides fast shared temporary state. Kafka carries durable asynchronous events. Managed Azure databases and storage retain business state.\par
+}
